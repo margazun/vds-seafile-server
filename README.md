@@ -16,13 +16,18 @@ Seafile будет работать в docker-контейнере
   - certbot
   - xray сервер
 
+---
+
 ## Содержание
+
 1. [Установка компонентов](#packages-install)
    - [Установка Docker](#docker-install)
 1. [Настройка xray](#xray-setup)
 1. [Настройка nginx](#nginx-setup)
 1. [Установка seafile](#seafile-install)
    - [Настройка seafile](#seafile-setup)
+
+---
 
 <a name="packages-install">
 
