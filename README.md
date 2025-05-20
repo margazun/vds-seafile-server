@@ -148,7 +148,7 @@ sudo systemctl restart xray
 Заранее создайте А-запись для своего нового доменного имени, по которому будет доступен **seafile**-сервер
 (например **seafile.example.com**), которое будет указывать на ip-адрес вашего сервера.
 
-* Внесем изменения в файл ``/etc/nginx/nginx.conf``
+* Внесем изменения в файл ``/etc/nginx/nginx.conf``, заменив <seafile.example.com> своим именем
 ```
 user www-data;
 worker_processes auto;
@@ -187,15 +187,15 @@ stream {
   }
   
   server {
-	  listen 443;
-	  proxy_pass $backend;
-	  ssl_preread on;
+	listen 443;
+	proxy_pass $backend;
+	ssl_preread on;
     proxy_connect_timeout 5s;
   }
 }
 ```
 
-* Получим для нашего домена **example.com** ssl-ключи
+* Получим для нашего домена **example.com** ssl-ключи, заменив <seafile.example.com> своим именем
 
 ```
 sudo certbot certonly --standalone --preferred-challenges http -d seafile.example.com -d www.seafile.example.com
@@ -207,7 +207,7 @@ sudo certbot certonly --standalone --preferred-challenges http -d seafile.exampl
 sudo touch /etc/nginx/sites-available/seafile.conf
 ```
 
-В любом редакторе внесем в него
+В любом редакторе внесем в него, заменив <seafile.example.com> своим именем
 
 ```
 server {
@@ -267,7 +267,16 @@ sudo systemctl restart nginx
 sudo touch docker-compose.yml
 ```
 
-В любом редакторе внесем в него
+В любом редакторе внесем в него, заменив <seafile.example.com> своим именем и задав свои значения:
+
+- MYSQL_ROOT_PASSWORD
+- MYSQL_PASSWORD
+- DB_ROOT_PASSWD
+- DB_PASSWD
+- SEAFILE_ADMIN_EMAIL
+- SEAFILE_ADMIN_PASSWORD
+- SEAFILE_SERVER_HOSTNAME
+
 
 ```
 services:
@@ -335,14 +344,14 @@ docker compose down
 
 ### Настройка Seafile
 
-* Изменим файл ``/opt/seafile-data/nginx/conf/seafile.nginx.conf`` в любом редакторе.
+* Изменим файл ``/opt/seafile-data/nginx/conf/seafile.nginx.conf`` в любом редакторе, заменив <seafile.example.com> своим именем
 
 ```
 # -*- mode: nginx -*-
 # Auto generated at 05/19/2025 10:28:25
 server {
 listen 80;
-server_name seafile.zelbe.ru;
+server_name seafile.example.com;
 
     client_max_body_size 10m;
 
@@ -410,7 +419,7 @@ server_name seafile.zelbe.ru;
 }
 ```
 
-* Изменим файл ``/opt/seafile-data/seafile/conf/seahub_settings.py`` в любом редакторе
+* Изменим файл ``/opt/seafile-data/seafile/conf/seahub_settings.py`` в любом редакторе, заменив <seafile.example.com> своим именем
 
 ```
 ...
