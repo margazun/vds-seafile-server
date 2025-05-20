@@ -509,7 +509,7 @@ renew_hook = /usr/local/bin/restart-seafile-nginx.sh
 sudo systemctl restart seafile-docker.service
 ```
 
-Все готово! Можно заходить браузером на страницу https://seafile.example.com
+Все готово! Можно заходить браузером на страницу https://seafile.example.com и настраивать свое личное облачное хранилище))
 
 **ВАЖНО** - заходить можно только по **https**-протоколу, по http доступа не будет.
 
