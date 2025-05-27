@@ -8,7 +8,9 @@
 о том, как арендовать в Нидерландах **vds**, установить **Xray** сервер для обхода блокировок,
 настроить клиентов на Android, Windows, OpenWRT (домашний роутер).
 
-Seafile будет работать в docker-контейнере
+На этом же сервере будем устанавливать файловое хранилище [Seafile](https://www.seafile.com/en/home/).
+
+Seafile будет работать в docker-контейнере.
 
 * Операционная система Ubuntu 24.04.2 LTS
 * На сервере уже установлены:
@@ -70,7 +72,7 @@ sudo apt update
 Устанавливаем Docker
 
 ```
-sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
 ```
 
 Проверяем, что после установки Docker уже работает
@@ -248,6 +250,12 @@ server {
 }
 ```
 
+* Активируем конфигурацию
+
+```
+sudo ln -s /etc/nginx/sites-available/seafile.conf /etc/nginx/sites-enabled/seafile.conf
+```
+
 * Проверим на ошибки **Nginx**
 
 ```
@@ -266,9 +274,11 @@ sudo systemctl restart nginx
 
 ### Установка Seafile
 
-* Создадим необходимые директории
+* Создадим необходимые директории и перейдем в **/opt/seafile**
 
-```sudo mkdir /opt/seafile && sudo mkdir /opt/seafile-data && sudo mkdir /opt/seafile-data/mysql && cd /opt/seafile```
+```
+sudo mkdir /opt/seafile && sudo mkdir /opt/seafile-data && sudo mkdir /opt/seafile-data/mysql && cd /opt/seafile
+```
 
 * Создадим файл ``docker-compose.yml``
 
@@ -502,6 +512,12 @@ docker restart seafile >> "$LOGFILE" 2>&1
 systemctl restart nginx >> "$LOGFILE" 2>&1
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') Seafile container and nginx restarted" >> "$LOGFILE"
+```
+
+* Сделаем его исполняемым
+
+```
+sudo chmod +x /usr/local/bin/restart-seafile-nginx.sh
 ```
 
 * Настроим перезагрузку **seafile** и **nginx** после перевыпуска сертификатов
