@@ -268,6 +268,27 @@ sudo nginx -t
 sudo systemctl restart nginx
 ```
 
+* Настроим Nginx так, чтобы он не запускался раньше **Docker**
+
+```
+sudo mkdir /etc/systemd/system/nginx.service.d/
+```
+
+Создадим файл ```/etc/systemd/system/nginx.service.d/override.conf```
+
+```
+sudo nano /etc/systemd/system/nginx.service.d/override.conf
+```
+
+Добавим в него
+
+```
+Wants=docker.service docker.socket seafile-docker.service
+
+[Service]
+ExecStartPre=/bin/sh -c 'for i in {1..30}; do nc -z 127.0.0.1 8081 && exit 0; echo "Waiting for Seafile ($i/30)..."; sleep 2; done; exit 1'
+```
+
 <a name="seafile-install">
 
 ## Установка и настройка Seafile
@@ -477,7 +498,7 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
-* Активируем юнит
+* Активируем юниты
 
 ```
 sudo systemctl daemon-reexec
@@ -489,6 +510,14 @@ sudo systemctl daemon-reload
 
 ```
 sudo systemctl enable seafile-docker.service
+```
+
+```
+sudo systemctl enable nginx
+```
+
+```
+sudo systemctl restart nginx
 ```
 
 * Создадим скрипт для перезапуска наших контейнеров и **nginx**
