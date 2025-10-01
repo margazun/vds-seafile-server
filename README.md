@@ -284,7 +284,7 @@ sudo nano /etc/systemd/system/nginx.service.d/override.conf
 
 ```
 [Unit]
-After=docker.service docker.socket seafile-docker..service
+After=docker.service docker.socket seafile-docker.service
 Wants=docker.service docker.socket seafile-docker.service
 
 [Service]
