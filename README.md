@@ -191,10 +191,18 @@ http {
 }
 
 stream {
+  upstream xray_backend {
+    server 127.0.0.1:8443;
+  }
+  
+  upstream domain_backend {
+    server 127.0.0.1:444;
+  }
+  
   map $ssl_preread_server_name $backend {
-    seafile.example.com      127.0.0.1:8088;
-    www.seafile.example.com  127.0.0.1:8088;
-    default                  127.0.0.1:8443;
+    seafile.example.com      domain_backend;
+    www.seafile.example.com  domain_backend;
+    default                  xray_backend;
   }
   
   server {
@@ -222,7 +230,7 @@ sudo touch /etc/nginx/sites-available/seafile.conf
 
 ```
 server {
-    listen 127.0.0.1:8088 ssl;
+    listen 444 ssl http2;
     server_name seafile.example.com www.seafile.example.com;
 
     ssl_certificate /etc/letsencrypt/live/seafile.example.com/fullchain.pem;
@@ -284,11 +292,11 @@ sudo nano /etc/systemd/system/nginx.service.d/override.conf
 
 ```
 [Unit]
-After=docker.service docker.socket seafile-docker.service
-Wants=docker.service docker.socket seafile-docker.service
+After=docker.service
+Wants=docker.service
 
 [Service]
-ExecStartPre=/bin/sh -c 'for i in {1..30}; do nc -z 127.0.0.1 8081 && exit 0; echo "Waiting for Seafile ($i/30)..."; sleep 2; done; exit 1'
+ExecStartPre=/bin/bash -c 'while ! docker ps --format "table {{.Names}}" | grep -q seafile; do sleep 2; done'
 ```
 
 <a name="seafile-install">
@@ -568,4 +576,3 @@ sudo systemctl restart seafile-docker.service
 Все готово! Можно заходить браузером на страницу https://seafile.example.com и настраивать свое личное облачное хранилище))
 
 **ВАЖНО** - заходить можно только по **https**-протоколу, по http доступа не будет.
-
