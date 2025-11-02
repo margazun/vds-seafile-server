@@ -416,8 +416,10 @@ WantedBy=multi-user.target
 
 <a name="nginx-settings-conf">
 
+
 * Внесем изменения в файл ``/etc/nginx/nginx.conf``,
   заменив <seafile.example.com> своим именем
+
 
 ```
 user www-data;
@@ -481,6 +483,7 @@ sudo touch /etc/nginx/sites-available/seafile.conf
 ```
 
 В любом редакторе внесем в него, заменив <seafile.example.com> своим именем
+
 
 ```
 server {
