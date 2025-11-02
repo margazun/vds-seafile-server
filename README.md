@@ -417,8 +417,8 @@ WantedBy=multi-user.target
 <a name="nginx-settings-conf">
 
 
-* Внесем изменения в файл ``/etc/nginx/nginx.conf``,
-  заменив <seafile.example.com> своим именем
+* Внесем изменения в файл **/etc/nginx/nginx.conf**,
+заменив <seafile.example.com> своим именем
 
 
 ```
