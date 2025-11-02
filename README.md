@@ -4,8 +4,8 @@
 
 ---
 
-Предыдущая статья [Установка VPN сервера для обхода блокировок](https://github.com/margazun/vpn-xray-server/)
-о том, как арендовать в Нидерландах **vds**, установить **Xray** сервер для обхода блокировок,
+Предыдущая статья [Установка VPN сервера](https://github.com/margazun/vpn-xray-server/)
+о том, как арендовать в Нидерландах **vds**, установить **Xray** сервер,
 настроить клиентов на Android, Windows, OpenWRT (домашний роутер).
 
 На этом же сервере будем устанавливать файловое хранилище [Seafile](https://www.seafile.com/en/home/).
@@ -14,30 +14,57 @@ Seafile будет работать в docker-контейнере.
 
 * Операционная система Ubuntu 24.04.2 LTS
 * На сервере уже установлены:
-  - nginx-full
-  - certbot
-  - xray сервер
+    - nginx-full
+    - certbot
+    - xray сервер
+
+### Что необходимо
+
+* А-запись у регистратора, которая указывает на ip vds-сервера.
+  Что-то вроде такого, для домена example.com A seafile -> 275.134.95.8.
+  Создаются записи в разделе управления зоной.
+
+* Немного времени
 
 ---
 
-## Содержание
+### Содержание
 
-1. [Установка компонентов](#packages-install)
-   - [Установка Docker](#docker-install)
-1. [Настройка xray](#xray-setup)
-1. [Настройка nginx](#nginx-setup)
-1. [Установка seafile](#seafile-install)
-   - [Настройка seafile](#seafile-setup)
+1. [Получение сертификатов для сайта](#ssl-cert)
+1. [Установка Docker](#docker-install)
+1. [Установка Seafile](#seafile-setup)
+    - [Подготовка compose-файла](#seafile-docker-setup)
+    - [Первый запуск](#seafile-docker-first-start)
+    - [Настройка](#seafile-settings)
+    - [Создание unit-файла](#seafile-unit)
+1. [Настройка xray](#xray-settings)
+1. [Настройка Nginx](#nginx-settings)
+    - [Изменение nginx.conf](#nginx-settings-conf)
+    - [Создание конфигурации для seafile](#nginx-conf-seafile)
+    - [Активация конфигурации](#nginx-conf-seafile-activate)
+    - [Настройка unit-файла](#nginx-unit)
+1. [Создание скрипта для перезапуска Nginx и Seafile](#script-restart-nginx-sefile)
+1. [Перезапуск Nginx и Seafile после перевыпуска сертификатов](#restart-nginx-sefile-after-cert)
+1. [Активация юнитов](#unit-activate)
+1. [Перезапуск Xray, Nginx и Seafile](#seafile-install)
+1. [Перезапуск сервера и финальная проверка](#server-reboot)
 
 ---
 
-<a name="packages-install">
+<a name="ssl-cert">
 
-## Установка необходимых компонентов
+## Получение сертификатов для сайта
+
+* Получим для нашего домена **example.com** ssl-ключи, заменив <seafile.example.com> своим именем
+
+```
+sudo certbot certonly --standalone --preferred-challenges http -d seafile.example.com -d www.seafile.example.com
+```
+
 
 <a name="docker-install">
 
-### Установка Docker
+## Установка Docker
 
 Обновляем систему
 
@@ -45,7 +72,7 @@ Seafile будет работать в docker-контейнере.
 sudo apt update && sudo apt upgrade -y
 ```
 
-Если не установлены, добавляем пакеты 
+Если не установлены, добавляем пакеты
 
 ```
 sudo apt install apt-transport-https curl -y
@@ -125,185 +152,13 @@ For more examples and ideas, visit:
 sudo groupadd docker && sudo usermod -aG docker $USER && newgrp docker
 ```
 
-<a name="xray-setup">
+<a name="seafile-setup">
 
-## Настройка **xray**
+## Установка Seafile
 
-Перенастроим **xray** так, чтобы он для протокола **vless** слушал порт 8443, вместо 443.
+<a name="seafile-docker-setup">
 
-Отредактируем файл ``/opt/xray/config.json`` изменим порт на 8443
-
-```
-..
-"inbounds": [
-  ...
-  {
-    "port": 8443,
-    "protocol": "vless",
-    ...
-  },
-  ...
-]
-```
-
-* Перезапустим **xray**
-
-```
-sudo systemctl restart xray
-```
-
-<a name="nginx-setup">
-
-### Настройка **Nginx**
-
-Заранее создайте А-запись для своего нового доменного имени, по которому будет доступен **seafile**-сервер
-(например **seafile.example.com**), которое будет указывать на ip-адрес вашего сервера.
-
-* Внесем изменения в файл ``/etc/nginx/nginx.conf``, заменив <seafile.example.com> своим именем
-```
-user www-data;
-worker_processes auto;
-pid /run/nginx.pid;
-error_log /var/log/nginx/error.log;
-include /etc/nginx/modules-enabled/*.conf;
-
-events {
-	worker_connections 768;
-}
-
-http {
-  sendfile on;
-  tcp_nopush on;
-  types_hash_max_size 2048;
-  include /etc/nginx/mime.types;
-  default_type application/octet-stream;
-  ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
-  ssl_prefer_server_ciphers on;
-  access_log /var/log/nginx/access.log;
-  gzip on;
-  include /etc/nginx/conf.d/*.conf;
-  include /etc/nginx/sites-enabled/*;
- 
-  client_body_timeout 12;
-  client_header_timeout 12;
-  keepalive_timeout 15;
-  send_timeout 10;
-}
-
-stream {
-  upstream xray_backend {
-    server 127.0.0.1:8443;
-  }
-  
-  upstream domain_backend {
-    server 127.0.0.1:444;
-  }
-  
-  map $ssl_preread_server_name $backend {
-    seafile.example.com      domain_backend;
-    www.seafile.example.com  domain_backend;
-    default                  xray_backend;
-  }
-  
-  server {
-	listen 443;
-	proxy_pass $backend;
-	ssl_preread on;
-    proxy_connect_timeout 5s;
-  }
-}
-```
-
-* Получим для нашего домена **example.com** ssl-ключи, заменив <seafile.example.com> своим именем
-
-```
-sudo certbot certonly --standalone --preferred-challenges http -d seafile.example.com -d www.seafile.example.com
-```
-
-* Создадим файл конфигурационный файл **seafile.conf** 
-
-```
-sudo touch /etc/nginx/sites-available/seafile.conf
-```
-
-В любом редакторе внесем в него, заменив <seafile.example.com> своим именем
-
-```
-server {
-    listen 444 ssl http2;
-    server_name seafile.example.com www.seafile.example.com;
-
-    ssl_certificate /etc/letsencrypt/live/seafile.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/seafile.example.com/privkey.pem;
-
-    ssl_session_timeout 5m;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256';
-    ssl_prefer_server_ciphers on;
-
-    proxy_set_header X-Forwarded-For $remote_addr;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    client_max_body_size 0;
-
-    location / {
-        proxy_pass http://127.0.0.1:8081;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Port 443;
-    }
-}
-```
-
-* Активируем конфигурацию
-
-```
-sudo ln -s /etc/nginx/sites-available/seafile.conf /etc/nginx/sites-enabled/seafile.conf
-```
-
-* Проверим на ошибки **Nginx**
-
-```
-sudo nginx -t
-```
-
-* Перезапустим **Nginx**
-
-```
-sudo systemctl restart nginx
-```
-
-* Настроим Nginx так, чтобы он не запускался раньше **Docker**
-
-```
-sudo mkdir /etc/systemd/system/nginx.service.d/
-```
-
-Создадим файл ```/etc/systemd/system/nginx.service.d/override.conf```
-
-```
-sudo nano /etc/systemd/system/nginx.service.d/override.conf
-```
-
-Добавим в него
-
-```
-[Unit]
-After=docker.service
-Wants=docker.service
-
-[Service]
-ExecStartPre=/bin/bash -c 'while ! docker ps --format "table {{.Names}}" | grep -q seafile; do sleep 2; done'
-```
-
-<a name="seafile-install">
-
-## Установка и настройка Seafile
-
-### Установка Seafile
+### Подготовка docker-файла
 
 * Создадим необходимые директории и перейдем в **/opt/seafile**
 
@@ -378,21 +233,28 @@ volumes:
     driver: local
 ```
 
-* Запустим наши контейнеры
+<a name="seafile-docker-first-start">
+
+### Первый запуск **Seafile**
+
+Запустим наши контейнеры
 
 ```
 docker compose up -d
 ```
 
-* После успешного запуска остановим контейнеры
+Дождемся успешного запуска контейнеров и после этого остановим их
 
 ```
 docker compose down
 ```
 
-<a name="seafile-setup">
+<a name="seafile-settings">
 
-### Настройка Seafile
+### Настройка **Seafile**
+
+После первого запуска в директории **/opt** должна появиться директория
+**seafile-data**.
 
 * Изменим файл ``/opt/seafile-data/nginx/conf/seafile.nginx.conf`` в любом редакторе, заменив <seafile.example.com> своим именем
 
@@ -469,6 +331,7 @@ server_name seafile.example.com;
 }
 ```
 
+
 * Изменим файл ``/opt/seafile-data/seafile/conf/seahub_settings.py`` в любом редакторе, заменив <seafile.example.com> своим именем
 
 ```
@@ -481,6 +344,10 @@ ENABLE_HTTPS = True
 MAX_UPLOAD_SIZE = 0
 ...
 ```
+<a name="seafile-unit">
+
+### Создание unit-файл
+
 * Создадим юнит для запуска контейнеров
 
 ```
@@ -493,7 +360,9 @@ sudo touch /etc/systemd/system/seafile-docker.service
 [Unit]
 Description=Seafile via Docker Compose
 Requires=docker.service
-After=docker.service network.target
+After=network-online.target docker.service docker.socket
+Wants=network-online.target
+Before=nginx.service
 
 [Service]
 Type=oneshot
@@ -501,34 +370,202 @@ RemainAfterExit=true
 WorkingDirectory=/opt/seafile
 ExecStart=/usr/bin/docker compose up -d
 ExecStop=/usr/bin/docker compose down
-TimeoutStartSec=0
+ExecStartPost=/bin/bash -c 'for i in {1..30}; do \
+  if docker ps --format "{{.Names}}" | grep -q seafile; then \
+    echo "Seafile container is up."; exit 0; \
+  fi; \
+  echo "Waiting for Seafile container to start ($i/30)..."; sleep 2; \
+done; \
+echo "Warning: Seafile container not detected after 60s."'
+
 Restart=on-failure
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-* Активируем юниты
+<a name="xray-settings">
+
+## Настройка Xray
+
+Настроим **xray** так, чтобы он для протокола **vless** слушал порт
+8443, вместо 443.
+
+Отредактируем файл ``/opt/xray/config.json`` изменим порт на 8443
 
 ```
-sudo systemctl daemon-reexec
+..
+"inbounds": [
+  ...
+  {
+    "port": 8443,
+    "protocol": "vless",
+    ...
+  },
+  ...
+]
 ```
 
-```
-sudo systemctl daemon-reload
-```
+<a name="nginx-settings">
+
+## Настройка Nginx
+
+Настроим **nginx** так, чтобы трафик, который предназначается для **seafile**
+перенаправлялся в запущенный docker-контейнер.
+
+<a name="nginx-settings-conf">
+
+* Внесем изменения в файл ``/etc/nginx/nginx.conf``,
+  заменив <seafile.example.com> своим именем
 
 ```
-sudo systemctl enable seafile-docker.service
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+error_log /var/log/nginx/error.log;
+include /etc/nginx/modules-enabled/*.conf;
+
+events {
+	worker_connections 768;
+}
+
+http {
+	sendfile on;
+	tcp_nopush on;
+	types_hash_max_size 2048;
+	include /etc/nginx/mime.types;
+	default_type application/octet-stream;
+	ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
+	ssl_prefer_server_ciphers on;
+	access_log /var/log/nginx/access.log;
+	gzip on;
+	include /etc/nginx/conf.d/*.conf;
+	include /etc/nginx/sites-enabled/*;
+ 
+  client_body_timeout 12;
+  client_header_timeout 12;
+  keepalive_timeout 15;
+  send_timeout 10;
+}
+
+stream {
+  upstream xray_backend {
+    server 127.0.0.1:8443;
+  }
+  
+  upstream domain_backend {
+    server 127.0.0.1:444;
+  }
+  
+  map $ssl_preread_server_name $backend {
+    seafile.example.com              domain_backend;
+    www.seafile.example.com          domain_backend;
+    default                          xray_backend;
+  }
+  
+  server {
+    listen 443;
+    proxy_pass $backend;
+    ssl_preread on;
+  }
+}
 ```
 
-```
-sudo systemctl enable nginx
-```
+<a name="nginx-conf-seafile">
+
+* Создадим файл конфигурационный файл **seafile.conf**
 
 ```
-sudo systemctl restart nginx
+sudo touch /etc/nginx/sites-available/seafile.conf
 ```
+
+В любом редакторе внесем в него, заменив <seafile.example.com> своим именем
+
+```
+server {
+    listen 444 ssl http2;
+    server_name seafile.example.com www.seafile.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/seafile.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/seafile.example.com/privkey.pem;
+
+    ssl_session_timeout 5m;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256';
+    ssl_prefer_server_ciphers on;
+
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 0;
+
+    location / {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port 443;
+    }
+}
+```
+
+<a name="nginx-conf-seafile-activate">
+
+* Активируем конфигурацию
+
+```
+sudo ln -s /etc/nginx/sites-available/seafile.conf /etc/nginx/sites-enabled/seafile.conf
+```
+
+<a name="nginx-unit">
+
+* Настроим **nginx** так, чтобы он запускался только после запуска **seafile**
+
+Создадим директорию ``/etc/systemd/system/nginx.service.d``
+
+```
+sudo mkdir /etc/systemd/system/nginx.service.d/
+```
+
+Создадим файл ```/etc/systemd/system/nginx.service.d/override.conf```
+
+```
+sudo touch /etc/systemd/system/nginx.service.d/override.conf
+```
+
+Добавим в него в любом редакторе
+
+```
+[Unit]
+After=network-online.target docker.service docker.socket seafile-docker.service
+Wants=network-online.target docker.service docker.socket seafile-docker.service
+
+[Service]
+ExecStartPre=/bin/bash -c 'for i in {1..60}; do \
+  if systemctl is-active --quiet docker && docker ps --format "{{.Names}}" | grep -q seafile; then \
+    echo "Seafile is up, starting nginx..."; exit 0; \
+  fi; \
+  echo "[$i/60] Waiting for Docker and Seafile..."; sleep 2; \
+done; \
+echo "Warning: Seafile not detected, starting nginx anyway"; exit 0'
+
+Restart=on-failure
+RestartSec=5s
+ExecStartPost=/bin/bash -c ' \
+  (sleep 180; \
+   if systemctl is-active --quiet docker && docker ps --format "{{.Names}}" | grep -q seafile; then \
+     echo "Seafile detected later — restarting nginx"; \
+     systemctl restart nginx; \
+   fi) & \
+'
+```
+
+<a name="script-restart-nginx-sefile">
+
+## Создание скрипта для перезапуска **Nginx** и **Seafile**
 
 * Создадим скрипт для перезапуска наших контейнеров и **nginx**
 
@@ -536,7 +573,7 @@ sudo systemctl restart nginx
 sudo touch /usr/local/bin/restart-seafile-nginx.sh
 ```
 
-И изменим его в любом редакторе
+Изменим его в любом редакторе
 
 ```
 #!/bin/bash
@@ -559,20 +596,72 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') Seafile container and nginx restarted" >> "$L
 sudo chmod +x /usr/local/bin/restart-seafile-nginx.sh
 ```
 
-* Настроим перезагрузку **seafile** и **nginx** после перевыпуска сертификатов
+<a name="restart-nginx-sefile-after-cert">
 
-Изменим файл ``/etc/letsencrypt/renewal/seafile.example.com.conf`` в любом редакторе. Добавим строку
+## Перезапуск **Nginx** и **Seafile** после перевыпуска сертификатов
+
+Изменим файл ``/etc/letsencrypt/renewal/seafile.example.com.conf``
+в любом редакторе. Добавим строку
 
 ```
 renew_hook = /usr/local/bin/restart-seafile-nginx.sh
 ```
 
-* Перезапустим **seafile**
+<a name="unit-activate">
+
+## Активация unit-файлов
 
 ```
-sudo systemctl restart seafile-docker.service
+sudo systemctl daemon-reload
 ```
 
-Все готово! Можно заходить браузером на страницу https://seafile.example.com и настраивать свое личное облачное хранилище))
+```
+sudo systemctl enable seafile-docker
+```
+
+```
+sudo systemctl enable nginx
+```
+
+<a name="services-restart">
+
+## Перезапуск **Xray**, **Nginx** и **Seafile**
+
+```
+sudo systemctl restart xray
+```
+
+```
+sudo systemctl restart seafile-docker
+```
+
+```
+sudo systemctl restart nginx
+```
+
+<a name="server-reboot">
+
+## Перезапуск сервера и финальная проверка
+
+* Перезапустим сервер
+
+```
+sudo reboot now
+```
+
+* После перезагрузки сервера и повторного подключения проверим статус сервисов
+
+```
+sudo systemctl status seafile-docker
+```
+
+```
+systemctl status nginx
+```
+
+Оба сервиса должны иметь статус **active (running)**
+
+Все готово! Можно заходить браузером на страницу https://seafile.example.com и
+настраивать свое личное облачное хранилище))
 
 **ВАЖНО** - заходить можно только по **https**-протоколу, по http доступа не будет.
